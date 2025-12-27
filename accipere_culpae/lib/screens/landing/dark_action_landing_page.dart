@@ -1,10 +1,12 @@
+import 'package:accipere_culpae/widgets/entry_header_brand.dart';
 import 'package:flutter/material.dart';
-import '../../widgets/header.dart';
+
 import '../../widgets/action_card.dart';
-import '../../widgets/mini_row.dart';
-import '../../widgets/mini_action.dart';
-import '../../widgets/recent_preview.dart';
 import '../../widgets/bottom_hint_bar.dart';
+import '../../widgets/header.dart';
+import '../../widgets/mini_action.dart';
+import '../../widgets/mini_row.dart';
+import '../../widgets/recent_preview.dart';
 
 class DarkActionLandingPage extends StatelessWidget {
   const DarkActionLandingPage({super.key});
@@ -19,7 +21,7 @@ class DarkActionLandingPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Entry'),
+        title: const EntryHeaderBrand(),
         actions: [
           IconButton(
             tooltip: 'Settings',
