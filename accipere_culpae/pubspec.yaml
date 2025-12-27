@@ -28,9 +28,12 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  app_settings: ^5.1.1
   flutter:
     sdk: flutter
-
+  mobile_scanner: ^5.2.3
+  image_picker: ^1.1.2
+  google_mlkit_text_recognition: ^0.13.0
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
