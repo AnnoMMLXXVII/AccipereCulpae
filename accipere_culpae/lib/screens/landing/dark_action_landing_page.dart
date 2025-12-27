@@ -63,7 +63,7 @@ class DarkActionLandingPage extends StatelessWidget {
                 title: 'Manual entry',
                 subtitle: 'Type vendor, amount, category.',
                 onTap: () {
-                  // TODO: Navigator.pushNamed(context, '/manual');
+                  Navigator.pushNamed(context, '/manual');
                 },
               ),
               const SizedBox(height: 10),

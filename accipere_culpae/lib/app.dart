@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'theme/dark_theme.dart';
+
 import 'screens/landing/dark_action_landing_page.dart';
+import 'screens/manual/manual_entry_screen.dart';
 import 'screens/scan/scan_capture_screen.dart';
+import 'theme/dark_theme.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -14,6 +16,7 @@ class App extends StatelessWidget {
       home: const DarkActionLandingPage(),
       routes: {
         '/scan': (_) => const ScanCaptureScreen(),
+        '/manual': (_) => const ManualEntryScreen(),
       },
     );
   }
