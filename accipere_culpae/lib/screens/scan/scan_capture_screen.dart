@@ -5,6 +5,8 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../shared/constants.dart';
+
 class ScanCaptureScreen extends StatefulWidget {
   const ScanCaptureScreen({super.key});
 
@@ -13,17 +15,20 @@ class ScanCaptureScreen extends StatefulWidget {
 }
 
 class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
-  final MobileScannerController _scanner = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
-    facing: CameraFacing.back,
-  );
+  final MobileScannerController _scanner = MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates, facing: CameraFacing.back);
+
+  final List<String> _scannedValues = [];
+  final Set<String> _scannedSet = {};
+  final ScrollController _scanListScroll = ScrollController();
 
   final TextEditingController _extractedCtrl = TextEditingController();
+  final TextEditingController _scannerCtrl = TextEditingController();
+
   final FocusNode _fieldFocus = FocusNode();
 
   bool _isBusy = false;
   bool _scannerPaused = false; // pause after first successful scan
-  String _mode = 'Barcode/QR'; // or 'Photo (OCR)'
+  String _mode = SCAN_RFID_MODE; // or SCAN_OCR_MODE
 
   // Debounce duplicates
   DateTime? _lastScanAt;
@@ -36,13 +41,18 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
       // triggers rebuild so we can show subtle “editing” states if desired
       if (mounted) setState(() {});
     });
+    _scannedValues.insert(0, (DateTime.now().millisecond * DateTime.now().microsecond).toString());
+    _scannerCtrl.addListener(_onScannerDetected);
   }
 
   @override
   void dispose() {
     _scanner.dispose();
+    _scanListScroll.dispose();
     _extractedCtrl.dispose();
     _fieldFocus.dispose();
+    _scannerCtrl.removeListener(_onScannerDetected);
+    _scannerCtrl.dispose();
     super.dispose();
   }
 
@@ -61,9 +71,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
   void _setExtracted(String value) {
     final trimmed = value.trim();
     _extractedCtrl.text = trimmed;
-    _extractedCtrl.selection = TextSelection.fromPosition(
-      TextPosition(offset: trimmed.length),
-    );
+    _extractedCtrl.selection = TextSelection.fromPosition(TextPosition(offset: trimmed.length));
     setState(() {});
   }
 
@@ -107,9 +115,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
 
       if (kIsWeb) {
         // ML Kit OCR not supported on web in this package
-        _showSnack(
-          'OCR on Web isn’t supported yet. Use Barcode/QR mode or add server OCR.',
-        );
+        _showSnack('OCR on Web isn’t supported yet. Use Barcode/QR mode or add server OCR.');
         return;
       }
 
@@ -122,9 +128,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
       final text = result.text.trim();
 
       if (text.isEmpty) {
-        _showSnack(
-          'No text detected. Try better lighting and a clearer photo.',
-        );
+        _showSnack('No text detected. Try better lighting and a clearer photo.');
       } else {
         _setExtracted(text);
         _showSnack('Text extracted. Review and submit.');
@@ -143,9 +147,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
 
     // If user is editing, do not overwrite.
     if (_userIsEditing) {
-      _showSnack(
-        'Detected a code, but you’re editing. Tap Rescan to try again.',
-      );
+      _showSnack('Detected a code, but you’re editing. Tap Rescan to try again.');
       await _pauseScanner();
       return;
     }
@@ -176,18 +178,10 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                   children: [
                     Text(
                       'Multiple codes found',
-                      style: TextStyle(
-                        color: scheme.onSurface,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
+                      style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800, fontSize: 16),
                     ),
                     const Spacer(),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                      color: scheme.onSurfaceVariant,
-                    ),
+                    IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close), color: scheme.onSurfaceVariant),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -200,10 +194,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: scheme.onSurface),
                     ),
-                    trailing: Icon(
-                      Icons.chevron_right,
-                      color: scheme.onSurfaceVariant,
-                    ),
+                    trailing: Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
                     onTap: () => Navigator.pop(context, v),
                   );
                 }),
@@ -224,7 +215,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
   }
 
   void _onBarcodeDetected(BarcodeCapture capture) async {
-    if (_mode != 'Barcode/QR') return;
+    if (_mode != SCAN_QR_MODE) return;
     if (_isBusy) return;
     if (_scannerPaused) return;
 
@@ -250,6 +241,48 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
     }
 
     await _handleDetectedValue(unique.first);
+  }
+
+  void _onScannerDetected() async {
+    if (_mode != SCAN_RFID_MODE) {
+      return;
+    }
+    if (_isBusy) return;
+    if (_scannerPaused) return;
+
+    final value = _scannerCtrl.text;
+    _appendScan(value);
+    // Pause immediately so we don't keep firing while showing chooser.
+    await _pauseScanner();
+  }
+
+  void _useScannedValue(String value) {
+    setState(() {
+      _extractedCtrl.text = value;
+      _extractedCtrl.selection = TextSelection.fromPosition(TextPosition(offset: _extractedCtrl.text.length));
+    });
+  }
+
+  String _normalizeScan(String raw) => raw.replaceAll('\n', '').replaceAll('\r', '').replaceAll('\t', '').trim();
+
+  void _appendScan(String raw) {
+    final value = _normalizeScan(raw);
+    if (value.isEmpty) return;
+
+    // Dedupe but preserve first-seen order
+    if (_scannedSet.add(value)) {
+      setState(() {
+        _scannedValues.add(value);
+      });
+
+      // auto-scroll to newest entry
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scanListScroll.hasClients) return;
+        _scanListScroll.animateTo(_scanListScroll.position.maxScrollExtent, duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
+      });
+    } else {
+      // optional: if you want duplicates allowed, remove the Set logic.
+    }
   }
 
   void _submit() {
@@ -279,18 +312,10 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
         return AlertDialog(
           backgroundColor: scheme.surfaceContainerHighest,
           title: const Text('Discard scanned text?'),
-          content: const Text(
-            'You have extracted text/value. Do you want to discard it and go back?',
-          ),
+          content: const Text('You have extracted text/value. Do you want to discard it and go back?'),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep editing'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Discard'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep editing')),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Discard')),
           ],
         );
       },
@@ -303,7 +328,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    final showWebOcrBanner = kIsWeb && _mode == 'Photo (OCR)';
+    final showWebOcrBanner = kIsWeb && _mode == SCAN_OCR_MODE;
 
     return PopScope(
       canPop: false,
@@ -318,16 +343,12 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
           actions: [
             IconButton(
               tooltip: 'Torch',
-              onPressed: _isBusy || _mode != 'Barcode/QR'
-                  ? null
-                  : () => _scanner.toggleTorch(),
+              onPressed: _isBusy || _mode != SCAN_QR_MODE ? null : () => _scanner.toggleTorch(),
               icon: const Icon(Icons.flash_on),
             ),
             IconButton(
               tooltip: 'Switch camera',
-              onPressed: _isBusy || _mode != 'Barcode/QR'
-                  ? null
-                  : () => _scanner.switchCamera(),
+              onPressed: _isBusy || _mode != SCAN_QR_MODE ? null : () => _scanner.switchCamera(),
               icon: const Icon(Icons.cameraswitch),
             ),
           ],
@@ -342,26 +363,38 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                   children: [
                     Expanded(
                       child: _ModeChip(
-                        label: 'Barcode/QR',
-                        selected: _mode == 'Barcode/QR',
+                        label: SCAN_RFID_MODE,
+                        selected: _mode == SCAN_RFID_MODE,
                         onTap: _isBusy
                             ? null
                             : () async {
-                                setState(() => _mode = 'Barcode/QR');
+                                setState(() => _mode = SCAN_RFID_MODE);
                                 // Resume camera scanning if switching back
                                 await _resumeScanner();
                               },
                       ),
                     ),
-                    const SizedBox(width: 10),
                     Expanded(
                       child: _ModeChip(
-                        label: 'Photo (OCR)',
-                        selected: _mode == 'Photo (OCR)',
+                        label: SCAN_QR_MODE,
+                        selected: _mode == SCAN_QR_MODE,
                         onTap: _isBusy
                             ? null
                             : () async {
-                                setState(() => _mode = 'Photo (OCR)');
+                                setState(() => _mode = SCAN_QR_MODE);
+                                // Resume camera scanning if switching back
+                                await _resumeScanner();
+                              },
+                      ),
+                    ),
+                    Expanded(
+                      child: _ModeChip(
+                        label: SCAN_OCR_MODE,
+                        selected: _mode == SCAN_OCR_MODE,
+                        onTap: _isBusy
+                            ? null
+                            : () async {
+                                setState(() => _mode = SCAN_OCR_MODE);
                                 // Stop scanner to avoid running camera unnecessarily in OCR mode
                                 await _pauseScanner();
                               },
@@ -377,11 +410,9 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                   child: _InlineBanner(
                     icon: Icons.info_outline,
                     title: 'OCR not available on Web yet',
-                    body:
-                        'Use Barcode/QR mode, or route photo uploads to a server OCR service.',
+                    body: 'Use Barcode/QR mode, or route photo uploads to a server OCR service.',
                   ),
                 ),
-
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -389,138 +420,194 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                     borderRadius: BorderRadius.circular(18),
                     child: Container(
                       decoration: BoxDecoration(
-                        border: Border.all(
-                          color: scheme.outlineVariant.withValues(alpha: 0.35),
-                        ),
+                        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Stack(
                         children: [
-                          if (_mode == 'Barcode/QR')
-                            MobileScanner(
-                              controller: _scanner,
-                              onDetect: _onBarcodeDetected,
-                              errorBuilder: (context, error, child) {
-                                return _ScannerErrorSurface(
-                                  error: error,
-                                  onManual: () {
-                                    _mode = 'Photo (OCR)';
-                                    setState(() {});
-                                    _pauseScanner();
-                                  },
-                                  onRetry: () {
-                                    _resumeScanner();
-                                  },
-                                );
-                              },
-                            )
-                          else
-                            Container(
-                              color: scheme.surfaceContainerHighest.withValues(
-                                alpha: 0.35,
-                              ),
-                              child: Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(18),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.document_scanner_outlined,
-                                        size: 48,
-                                        color: scheme.onSurfaceVariant,
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Text(
-                                        'Capture a photo to extract text',
-                                        style: TextStyle(
-                                          color: scheme.onSurfaceVariant,
+                          if (_mode != SCAN_RFID_MODE) ...[
+                            Stack(
+                              children: [
+                                if (_mode == SCAN_QR_MODE)
+                                  MobileScanner(
+                                    controller: _scanner,
+                                    onDetect: _onBarcodeDetected,
+                                    errorBuilder: (context, error, child) {
+                                      return _ScannerErrorSurface(
+                                        error: error,
+                                        onManual: () {
+                                          _mode = SCAN_OCR_MODE;
+                                          setState(() {});
+                                          _pauseScanner();
+                                        },
+                                        onRetry: () {
+                                          _resumeScanner();
+                                        },
+                                      );
+                                    },
+                                  )
+                                else
+                                  Container(
+                                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                                    child: Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(18),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.document_scanner_outlined, size: 48, color: scheme.onSurfaceVariant),
+                                            const SizedBox(height: 10),
+                                            Text('Capture a photo to extract text', style: TextStyle(color: scheme.onSurfaceVariant)),
+                                            const SizedBox(height: 14),
+                                            Wrap(
+                                              spacing: 10,
+                                              runSpacing: 10,
+                                              alignment: WrapAlignment.center,
+                                              children: [
+                                                FilledButton.icon(
+                                                  onPressed: _isBusy || kIsWeb ? null : () => _pickPhotoAndRunOcr(source: ImageSource.camera),
+                                                  icon: const Icon(Icons.camera_alt),
+                                                  label: const Text('Camera'),
+                                                ),
+                                                OutlinedButton.icon(
+                                                  onPressed: _isBusy || kIsWeb ? null : () => _pickPhotoAndRunOcr(source: ImageSource.gallery),
+                                                  icon: const Icon(Icons.photo_library_outlined),
+                                                  label: const Text('Gallery'),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const SizedBox(height: 14),
-                                      Wrap(
-                                        spacing: 10,
-                                        runSpacing: 10,
-                                        alignment: WrapAlignment.center,
-                                        children: [
-                                          FilledButton.icon(
-                                            onPressed: _isBusy || kIsWeb
-                                                ? null
-                                                : () => _pickPhotoAndRunOcr(
-                                                    source: ImageSource.camera,
-                                                  ),
-                                            icon: const Icon(Icons.camera_alt),
-                                            label: const Text('Camera'),
-                                          ),
-                                          OutlinedButton.icon(
-                                            onPressed: _isBusy || kIsWeb
-                                                ? null
-                                                : () => _pickPhotoAndRunOcr(
-                                                    source: ImageSource.gallery,
-                                                  ),
-                                            icon: const Icon(
-                                              Icons.photo_library_outlined,
-                                            ),
-                                            label: const Text('Gallery'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                          // Scan frame overlay (subtle)
-                          IgnorePointer(
-                            child: Center(
-                              child: Container(
-                                width: 260,
-                                height: 160,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: scheme.primary.withValues(
-                                      alpha: 0.45,
                                     ),
-                                    width: 1.3,
+                                  ),
+
+                                // Scan frame overlay (subtle)
+                                IgnorePointer(
+                                  child: Center(
+                                    child: Container(
+                                      width: 260,
+                                      height: 160,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(color: scheme.primary.withValues(alpha: 0.45), width: 1.3),
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                          ),
 
-                          // Paused overlay
-                          if (_mode == 'Barcode/QR' &&
-                              _scannerPaused &&
-                              !_isBusy)
-                            Align(
-                              alignment: Alignment.topCenter,
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: _Pill(
-                                  icon: Icons.pause_circle_outline,
-                                  text: _userIsEditing
-                                      ? 'Paused (editing)'
-                                      : 'Paused (review)',
+                                // Paused overlay
+                                if (_scannerPaused && !_isBusy)
+                                  Align(
+                                    alignment: Alignment.topCenter,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: _Pill(icon: Icons.pause_circle_outline, text: _userIsEditing ? 'Paused (editing)' : 'Paused (review)'),
+                                    ),
+                                  ),
+
+                                // Busy overlay
+                                if (_isBusy)
+                                  Container(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    child: const Center(child: CircularProgressIndicator()),
+                                  ),
+                              ],
+                            ),
+                          ] else ...[
+                            ListView(
+                              controller: _scanListScroll,
+                              padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
+                              children: [
+                                // Title
+                                Text(
+                                  'Scanner Mode (RFID)',
+                                  style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w900, fontSize: 18),
                                 ),
-                              ),
+                                // Actions
+                                // Scanned values list
+                                Text(
+                                  'Current value',
+                                  style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 14),
+                                TextField(
+                                  controller: _scannerCtrl,
+                                  focusNode: _fieldFocus,
+                                  minLines: 1,
+                                  maxLines: 4,
+                                  autofocus: true,
+                                  readOnly: true,
+                                  // showCursor: true,
+                                  enableInteractiveSelection: false,
+                                    decoration: InputDecoration(
+                                      hintText: "Scanned barcode",
+                                      filled: true,
+                                      fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: BorderSide(color: scheme.primary.withValues(alpha: 0.55), width: 1.3),
+                                      ),
+                                    ),
+                                ),
+                                const SizedBox(height: 14),
+                                // Scanned values list
+                                Text(
+                                  'Scanned values',
+                                  style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
+                                ),
+                                const SizedBox(height: 8),
+                                if (_scannedValues.isEmpty) ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.16),
+                                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+                                    ),
+                                    child: Text(
+                                      'No scans yet. Scan with your RFID gun or barcode scanner.',
+                                      style: TextStyle(color: scheme.onSurfaceVariant),
+                                    ),
+                                  ),
+                                ] else ...[
+                                  ..._scannedValues.map((v) {
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.16),
+                                        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+                                      ),
+                                      child: ListTile(
+                                        title: Text(
+                                          v,
+                                          style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800),
+                                        ),
+                                        subtitle: Text('Tap to use', style: TextStyle(color: scheme.onSurfaceVariant)),
+                                        trailing: const Icon(Icons.north_west),
+                                        onTap: () => _useScannedValue(v),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ],
                             ),
-
-                          if (_isBusy)
-                            Container(
-                              color: Colors.black.withValues(alpha: 0.35),
-                              child: const Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            ),
+                          ],
                         ],
                       ),
                     ),
                   ),
                 ),
               ),
-
               // Review + submit zone
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
@@ -528,11 +615,8 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Extracted value',
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      'ID for submission',
+                      style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 8),
                     TextField(
@@ -540,50 +624,35 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                       focusNode: _fieldFocus,
                       minLines: 1,
                       maxLines: 4,
+                      autofocus: false,
+                      readOnly: _mode == SCAN_RFID_MODE,
                       decoration: InputDecoration(
-                        hintText: _mode == 'Barcode/QR'
+                        hintText: _mode != SCAN_OCR_MODE
                             ? 'Scan a barcode/QR to fill this'
-                            : (kIsWeb
-                                  ? 'OCR not available on web (type here)'
-                                  : 'Take a photo to extract text here'),
+                            : (kIsWeb ? 'OCR not available on web (type here)' : 'Take a photo to extract text here'),
                         filled: true,
-                        fillColor: scheme.surfaceContainerHighest.withValues(
-                          alpha: 0.35,
-                        ),
+                        fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: scheme.outlineVariant.withValues(
-                              alpha: 0.35,
-                            ),
-                          ),
+                          borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: scheme.outlineVariant.withValues(
-                              alpha: 0.35,
-                            ),
-                          ),
+                          borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: scheme.primary.withValues(alpha: 0.55),
-                            width: 1.3,
-                          ),
+                          borderSide: BorderSide(color: scheme.primary.withValues(alpha: 0.55), width: 1.3),
                         ),
                         suffixIcon: IconButton(
                           tooltip: 'Clear',
-                          onPressed: _extractedCtrl.text.isEmpty
-                              ? null
-                              : _clear,
+                          onPressed: _extractedCtrl.text.isEmpty ? null : _clear,
                           icon: const Icon(Icons.clear),
                         ),
                       ),
                       onChanged: (_) {
                         // If user types, keep scanner paused to avoid overwrites.
-                        if (_mode == 'Barcode/QR' && !_scannerPaused) {
+                        if (!_scannerPaused) {
                           _pauseScanner();
                         }
                       },
@@ -596,26 +665,20 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                             onPressed: _isBusy
                                 ? null
                                 : () async {
-                                    if (_mode == 'Barcode/QR') {
+                                    if (_mode == SCAN_QR_MODE) {
                                       // Explicit rescan: resume and optionally clear field
                                       await _resumeScanner(clearField: false);
                                       _showSnack('Ready. Scan again.');
                                     } else {
                                       if (kIsWeb) {
-                                        _showSnack(
-                                          'OCR on Web isn’t supported yet.',
-                                        );
+                                        _showSnack('OCR on Web isn’t supported yet.');
                                       } else {
-                                        await _pickPhotoAndRunOcr(
-                                          source: ImageSource.camera,
-                                        );
+                                        await _pickPhotoAndRunOcr(source: ImageSource.camera);
                                       }
                                     }
                                   },
                             icon: const Icon(Icons.refresh),
-                            label: Text(
-                              _mode == 'Barcode/QR' ? 'Rescan' : 'Retake',
-                            ),
+                            label: Text(_mode == SCAN_QR_MODE ? 'Rescan' : 'Retake'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -640,11 +703,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
 }
 
 class _ModeChip extends StatelessWidget {
-  const _ModeChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+  const _ModeChip({required this.label, required this.selected, required this.onTap});
 
   final String label;
   final bool selected;
@@ -661,22 +720,13 @@ class _ModeChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          color: selected
-              ? scheme.primary.withValues(alpha: 0.16)
-              : scheme.surfaceContainerHighest.withValues(alpha: 0.25),
-          border: Border.all(
-            color: selected
-                ? scheme.primary.withValues(alpha: 0.55)
-                : scheme.outlineVariant.withValues(alpha: 0.35),
-          ),
+          color: selected ? scheme.primary.withValues(alpha: 0.16) : scheme.surfaceContainerHighest.withValues(alpha: 0.25),
+          border: Border.all(color: selected ? scheme.primary.withValues(alpha: 0.55) : scheme.outlineVariant.withValues(alpha: 0.35)),
         ),
         child: Center(
           child: Text(
             label,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w700, color: selected ? scheme.onSurface : scheme.onSurfaceVariant),
           ),
         ),
       ),
@@ -685,11 +735,7 @@ class _ModeChip extends StatelessWidget {
 }
 
 class _InlineBanner extends StatelessWidget {
-  const _InlineBanner({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
+  const _InlineBanner({required this.icon, required this.title, required this.body});
 
   final IconData icon;
   final String title;
@@ -704,9 +750,7 @@ class _InlineBanner extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.28),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
       ),
       child: Row(
         children: [
@@ -718,10 +762,7 @@ class _InlineBanner extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(body, style: TextStyle(color: scheme.onSurfaceVariant)),
@@ -736,6 +777,7 @@ class _InlineBanner extends StatelessWidget {
 
 class _Pill extends StatelessWidget {
   const _Pill({required this.icon, required this.text});
+
   final IconData icon;
   final String text;
 
@@ -747,9 +789,7 @@ class _Pill extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -758,10 +798,7 @@ class _Pill extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             text,
-            style: TextStyle(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -770,11 +807,7 @@ class _Pill extends StatelessWidget {
 }
 
 class _ScannerErrorSurface extends StatelessWidget {
-  const _ScannerErrorSurface({
-    required this.error,
-    required this.onManual,
-    required this.onRetry,
-  });
+  const _ScannerErrorSurface({required this.error, required this.onManual, required this.onRetry});
 
   final MobileScannerException error;
   final VoidCallback onManual;
@@ -785,8 +818,7 @@ class _ScannerErrorSurface extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     String title = 'Camera unavailable';
-    String body =
-        'We couldn’t access the camera. Try again, or use another input method.';
+    String body = 'We couldn’t access the camera. Try again, or use another input method.';
 
     // Common error codes:
     // - permissionDenied
@@ -797,8 +829,7 @@ class _ScannerErrorSurface extends StatelessWidget {
 
     if (code == MobileScannerErrorCode.permissionDenied) {
       title = 'Camera permission denied';
-      body =
-          'Enable camera permission in settings, or use Photo/OCR or manual entry.';
+      body = 'Enable camera permission in settings, or use Photo/OCR or manual entry.';
     } else if (code == MobileScannerErrorCode.unsupported) {
       title = 'Camera not supported';
       body = 'This device/browser does not support camera scanning.';
@@ -815,26 +846,16 @@ class _ScannerErrorSurface extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
               color: scheme.surfaceContainerHighest.withValues(alpha: 0.30),
-              border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.35),
-              ),
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.videocam_off_outlined,
-                  size: 44,
-                  color: scheme.onSurfaceVariant,
-                ),
+                Icon(Icons.videocam_off_outlined, size: 44, color: scheme.onSurfaceVariant),
                 const SizedBox(height: 10),
                 Text(
                   title,
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w900, fontSize: 16),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -846,11 +867,7 @@ class _ScannerErrorSurface extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onRetry,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
-                      ),
+                      child: OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -863,13 +880,7 @@ class _ScannerErrorSurface extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Error: ${error.errorCode.name}',
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.85),
-                    fontSize: 12,
-                  ),
-                ),
+                Text('Error: ${error.errorCode.name}', style: TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.85), fontSize: 12)),
               ],
             ),
           ),
