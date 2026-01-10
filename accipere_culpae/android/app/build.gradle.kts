@@ -50,6 +50,7 @@ android {
     }
 
     defaultConfig {
+        manifestPlaceholders["applicationName"] = "android.app.Application"
         applicationId = "com.anno.domini"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
