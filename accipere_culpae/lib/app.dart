@@ -1,3 +1,4 @@
+import 'package:accipere_culpae/screens/history/scan_history.dart';
 import 'package:flutter/material.dart';
 
 import 'screens/landing/dark_action_landing_page.dart';
@@ -17,7 +18,7 @@ class App extends StatelessWidget {
       routes: {
         '/scan': (_) => const ScanCaptureScreen(),
         '/manual': (_) => const ManualEntryScreen(),
-      },
+        '/scan_history': (_) => const ScanHistoryScreen()},
     );
   }
 }

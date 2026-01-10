@@ -114,6 +114,13 @@ class DarkActionLandingPage extends StatelessWidget {
                       // TODO: Navigator.pushNamed(context, '/sources');
                     },
                   ),
+                  MiniAction(
+                    icon: Icons.history_outlined,
+                    label: 'Scan History',
+                    onTap: () {
+                      Navigator.pushNamed(context, '/scan_history');
+                    },
+                  ),
                 ],
               ),
 

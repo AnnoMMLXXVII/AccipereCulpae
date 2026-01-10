@@ -1,10 +1,18 @@
-import 'package:app_settings/app_settings.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
+import 'dart:convert';
 
+import 'package:app_settings/app_settings.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:logger/logger.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../models/product_entry.dart';
+import '../../services/barcode_cache.dart';
 import '../../shared/constants.dart';
 
 class ScanCaptureScreen extends StatefulWidget {
@@ -15,6 +23,11 @@ class ScanCaptureScreen extends StatefulWidget {
 }
 
 class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
+  final logger = Logger(
+    printer: PrettyPrinter(methodCount: 0, errorMethodCount: 5, lineLength: 120, colors: true, printEmojis: true, printTime: true),
+    level: kReleaseMode ? Level.warning : Level.verbose,
+  );
+
   final MobileScannerController _scanner = MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates, facing: CameraFacing.back);
 
   final List<String> _scannedValues = [];
@@ -25,7 +38,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
   final TextEditingController _scannerCtrl = TextEditingController();
 
   final FocusNode _fieldFocus = FocusNode();
-
+  bool _isOrientationLocked = false;
   bool _isBusy = false;
   bool _scannerPaused = false; // pause after first successful scan
   String _mode = SCAN_RFID_MODE; // or SCAN_OCR_MODE
@@ -37,11 +50,20 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Set all orientations by default
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
     _fieldFocus.addListener(() {
       // triggers rebuild so we can show subtle “editing” states if desired
       if (mounted) setState(() {});
     });
-    _scannedValues.insert(0, (DateTime.now().millisecond * DateTime.now().microsecond).toString());
+    // _scannedValues.insert(0, (DateTime.now().millisecond * DateTime.now().microsecond).toString());
     _scannerCtrl.addListener(_onScannerDetected);
   }
 
@@ -54,6 +76,37 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
     _scannerCtrl.removeListener(_onScannerDetected);
     _scannerCtrl.dispose();
     super.dispose();
+  }
+
+  void _toggleOrientationLock() {
+    setState(() {
+      _isOrientationLocked = !_isOrientationLocked;
+    });
+
+    if (_isOrientationLocked) {
+      // Lock to the actual current device orientation
+      final orientation = View.of(context).physicalSize.aspectRatio > 1 ? Orientation.landscape : Orientation.portrait;
+
+      // For more precise detection, we need to check the actual rotation
+      // This will lock to whatever orientation the device is currently in
+      if (orientation == Orientation.portrait) {
+        // Could be portrait up or portrait upside down
+        // Lock to both portrait modes to maintain current position
+        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+      } else {
+        // Could be landscape left or landscape right
+        // Lock to both landscape modes to maintain current position
+        SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+      }
+    } else {
+      // Unlock all orientations
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
   }
 
   bool get _userIsEditing => _fieldFocus.hasFocus;
@@ -155,7 +208,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
     if (!_acceptScan(v)) return;
 
     _setExtracted(v);
-    _showSnack('Scanned. Review and submit.');
+    // _showSnack('Scanned. Review and submit.');
     await _pauseScanner();
   }
 
@@ -244,44 +297,99 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
   }
 
   void _onScannerDetected() async {
-    if (_mode != SCAN_RFID_MODE) {
-      return;
-    }
+    logger.i('Mode: $_mode');
+    if (_mode != SCAN_RFID_MODE) return;
+
+    logger.i('_isBusy: $_isBusy');
     if (_isBusy) return;
-    if (_scannerPaused) return;
 
     final value = _scannerCtrl.text;
-    _appendScan(value);
-    // Pause immediately so we don't keep firing while showing chooser.
-    await _pauseScanner();
+
+    if (value.endsWith('\n') || value.endsWith('\r')) {
+      await _pauseScanner();
+      _scannerCtrl.clear();
+      _fieldFocus.requestFocus();
+      // Do network call without blocking UI
+      lookupBarcode(value.trim())
+          .then((product) {
+            if (product != null) {
+              _appendScan(product.id, product);
+              // _showSnack('Product found: ${product.name}');
+            } else {
+              _showSnack('No product info found for scanned code.');
+            }
+          })
+          .catchError((e) {
+            logger.e('Barcode lookup failed: $e');
+            _showSnack('Lookup failed. Check connection.');
+          });
+    }
+  }
+
+  Future<Product?> lookupBarcode(String barcode) async {
+    // Replace the lookupBarcode method
+    // Try cache first
+    final cached = await BarcodeCache.get(barcode);
+    if (cached != null) {
+      logger.i('Cache hit for barcode: $barcode');
+      return cached;
+    }
+    logger.i('Cache miss - fetching from API: $barcode');
+    final url = Uri.parse('https://world.openfoodfacts.org/api/v0/product/$barcode.json');
+    final res = await http.get(url);
+    if (res.statusCode != 200) return null;
+    final json = jsonDecode(res.body);
+    if (json['status'] != 1) return null;
+    final p = json['product'];
+    logger.i('Product data: $p');
+    final product = Product(id: p['_id'], name: p['product_name'] ?? '', brand: p['brands'] ?? '', category: p['categories'] ?? '');
+    // Cache the result
+    await BarcodeCache.set(barcode, product);
+    return product;
+  }
+
+  Future<void> _saveToHistory(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final history = prefs.getStringList('scanned_values') ?? [];
+
+    final timestamp = DateTime.now().microsecondsSinceEpoch.toString();
+    final entry = '$timestamp|$value';
+    // Add to history (avoid exact duplicates at the end)
+    if (history.isEmpty || history.last != value) {
+      history.add(entry);
+      // Optional: limit history size (e.g., keep last 100)
+      if (history.length > 100) {
+        history.removeAt(0);
+      }
+      await prefs.setStringList('scanned_values', history);
+    }
   }
 
   void _useScannedValue(String value) {
     setState(() {
-      _extractedCtrl.text = value;
+      _extractedCtrl.text = value.split("\|")[0].trim();
       _extractedCtrl.selection = TextSelection.fromPosition(TextPosition(offset: _extractedCtrl.text.length));
     });
   }
 
   String _normalizeScan(String raw) => raw.replaceAll('\n', '').replaceAll('\r', '').replaceAll('\t', '').trim();
 
-  void _appendScan(String raw) {
+  void _appendScan(String raw, Product product) async {
     final value = _normalizeScan(raw);
-    if (value.isEmpty) return;
-
-    // Dedupe but preserve first-seen order
     if (_scannedSet.add(value)) {
       setState(() {
-        _scannedValues.add(value);
+        _scannedValues.add(product.toString());
       });
-
-      // auto-scroll to newest entry
+      // Await the save to catch errors
+      try {
+        await _saveToHistory(value);
+      } catch (e) {
+        logger.e('Failed to save to history: $e');
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scanListScroll.hasClients) return;
         _scanListScroll.animateTo(_scanListScroll.position.maxScrollExtent, duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
       });
-    } else {
-      // optional: if you want duplicates allowed, remove the Set logic.
     }
   }
 
@@ -296,8 +404,13 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
     Navigator.pop(context, value);
   }
 
-  void _clear() {
+  void _clearExtractedCtrl() {
     _extractedCtrl.clear();
+    setState(() {});
+  }
+
+  void _clearCurrentValueCtrl() {
+    _scannerCtrl.clear();
     setState(() {});
   }
 
@@ -341,6 +454,14 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
         appBar: AppBar(
           title: const Text('Scan'),
           actions: [
+            IconButton(
+              tooltip: _isOrientationLocked ? 'Unlock rotation' : 'Lock rotation',
+              onPressed: _toggleOrientationLock,
+              icon: Icon(
+                _isOrientationLocked ? Icons.screen_lock_rotation : Icons.screen_rotation,
+                color: _isOrientationLocked ? scheme.error : scheme.primary.withValues(alpha: 0.7),
+              ),
+            ),
             IconButton(
               tooltip: 'Torch',
               onPressed: _isBusy || _mode != SCAN_QR_MODE ? null : () => _scanner.toggleTorch(),
@@ -530,41 +651,46 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                                   'Current value',
                                   style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
                                 ),
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 2),
                                 TextField(
                                   controller: _scannerCtrl,
                                   focusNode: _fieldFocus,
                                   minLines: 1,
-                                  maxLines: 4,
+                                  maxLines: 2,
                                   autofocus: true,
-                                  readOnly: true,
-                                  // showCursor: true,
+                                  readOnly: false,
+                                  showCursor: true,
                                   enableInteractiveSelection: false,
-                                    decoration: InputDecoration(
-                                      hintText: "Scanned barcode",
-                                      filled: true,
-                                      fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: BorderSide(color: scheme.primary.withValues(alpha: 0.55), width: 1.3),
-                                      ),
+                                  decoration: InputDecoration(
+                                    hintText: "Scanned barcode",
+                                    filled: true,
+                                    fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
                                     ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: BorderSide(color: scheme.primary.withValues(alpha: 0.55), width: 1.3),
+                                    ),
+                                    suffixIcon: IconButton(
+                                      tooltip: 'Clear',
+                                      onPressed: _scannerCtrl.text.isEmpty ? null : _clearCurrentValueCtrl,
+                                      icon: const Icon(Icons.clear),
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 2),
                                 // Scanned values list
                                 Text(
                                   'Scanned values',
                                   style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700),
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 2),
                                 if (_scannedValues.isEmpty) ...[
                                   Container(
                                     padding: const EdgeInsets.all(14),
@@ -584,17 +710,22 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                                       margin: const EdgeInsets.only(bottom: 10),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(16),
-                                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.16),
-                                        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+                                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.66),
+                                        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.95)),
                                       ),
                                       child: ListTile(
-                                        title: Text(
-                                          v,
-                                          style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800),
+                                        title: SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: Text(
+                                            v.toString(),
+                                            style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
-                                        subtitle: Text('Tap to use', style: TextStyle(color: scheme.onSurfaceVariant)),
-                                        trailing: const Icon(Icons.north_west),
-                                        onTap: () => _useScannedValue(v),
+                                        // subtitle: Text('Tap to use', style: TextStyle(color: scheme.onSurfaceVariant)),
+                                        trailing: const Icon(Icons.north_east_outlined),
+                                        onTap: () => _useScannedValue(v.toString()),
                                       ),
                                     );
                                   }),
@@ -646,7 +777,7 @@ class _ScanCaptureScreenState extends State<ScanCaptureScreen> {
                         ),
                         suffixIcon: IconButton(
                           tooltip: 'Clear',
-                          onPressed: _extractedCtrl.text.isEmpty ? null : _clear,
+                          onPressed: _extractedCtrl.text.isEmpty ? null : _clearExtractedCtrl,
                           icon: const Icon(Icons.clear),
                         ),
                       ),
