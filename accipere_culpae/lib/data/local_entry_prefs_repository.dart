@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'entry_prefs.dart';
 import 'entry_prefs_repository.dart';
 

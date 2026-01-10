@@ -1,4 +1,3 @@
-import 'package:accipere_culpae/screens/manual/manual_preview_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../app_services.dart';
@@ -6,6 +5,7 @@ import '../../data/entry_prefs.dart';
 import '../../data/history_fields.dart';
 import '../../models/transaction_entry.dart';
 import '../../widgets/history_autocomplete_field.dart';
+import 'manual_preview_screen.dart';
 
 class ManualEntryScreen extends StatefulWidget {
   const ManualEntryScreen({super.key});
@@ -60,40 +60,16 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     super.initState();
 
     // Defaults: good POS behavior
-    _keepDate = AppServices.entryPrefs.getBool(
-      EntryPrefKey.keepDate,
-      fallback: true,
-    );
-    _keepSource = AppServices.entryPrefs.getBool(
-      EntryPrefKey.keepSource,
-      fallback: true,
-    );
-    _keepCategory = AppServices.entryPrefs.getBool(
-      EntryPrefKey.keepCategory,
-      fallback: true,
-    );
-    _keepQuantity = AppServices.entryPrefs.getBool(
-      EntryPrefKey.keepQuantity,
-      fallback: true,
-    );
+    _keepDate = AppServices.entryPrefs.getBool(EntryPrefKey.keepDate, fallback: true);
+    _keepSource = AppServices.entryPrefs.getBool(EntryPrefKey.keepSource, fallback: true);
+    _keepCategory = AppServices.entryPrefs.getBool(EntryPrefKey.keepCategory, fallback: true);
+    _keepQuantity = AppServices.entryPrefs.getBool(EntryPrefKey.keepQuantity, fallback: true);
 
-    _keepDescription = AppServices.entryPrefs.getBool(
-      EntryPrefKey.keepDescription,
-      fallback: false,
-    );
-    _keepUnitPrice = AppServices.entryPrefs.getBool(
-      EntryPrefKey.keepUnitPrice,
-      fallback: false,
-    );
-    _keepBarcode = AppServices.entryPrefs.getBool(
-      EntryPrefKey.keepBarcodeText,
-      fallback: false,
-    );
+    _keepDescription = AppServices.entryPrefs.getBool(EntryPrefKey.keepDescription, fallback: false);
+    _keepUnitPrice = AppServices.entryPrefs.getBool(EntryPrefKey.keepUnitPrice, fallback: false);
+    _keepBarcode = AppServices.entryPrefs.getBool(EntryPrefKey.keepBarcodeText, fallback: false);
 
-    _showQuickAddSettings = AppServices.entryPrefs.getBool(
-      EntryPrefKey.quickAddExpanded,
-      fallback: false,
-    );
+    _showQuickAddSettings = AppServices.entryPrefs.getBool(EntryPrefKey.quickAddExpanded, fallback: false);
   }
 
   Future<void> _setPref(EntryPrefKey key, bool value) async {
@@ -155,12 +131,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _date,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
+    final picked = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime(2000), lastDate: DateTime(2100));
     if (picked != null) {
       setState(() {
         _date = picked;
@@ -185,18 +156,10 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: scheme.surfaceContainerHighest,
         title: const Text('Discard entry?'),
-        content: const Text(
-          'You have unsaved changes. Do you want to discard them?',
-        ),
+        content: const Text('You have unsaved changes. Do you want to discard them?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep editing'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Discard'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep editing')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Discard')),
         ],
       ),
     );
@@ -224,19 +187,14 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       barcodeText: _showBarcode ? _barcodeCtrl.text.trim() : null,
     );
 
-    final saved = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => ManualPreviewScreen(entry: entry)),
-    );
+    final saved = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => ManualPreviewScreen(entry: entry)));
 
     if (!mounted) return;
 
     if (saved == true) {
       _resetFormAfterSave(saved: entry);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saved. Ready for next entry.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved. Ready for next entry.')));
     }
   }
 
@@ -314,9 +272,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                         _dirty = true;
                       });
 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Last entry copied')),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Last entry copied')));
                     },
               icon: const Icon(Icons.copy),
             ),
@@ -334,39 +290,23 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                   onTap: _pickDate,
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 14,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
-                      color: scheme.surfaceContainerHighest.withValues(
-                        alpha: 0.35,
-                      ),
-                      border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.35),
-                      ),
+                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
                     ),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.calendar_today_outlined,
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        Icon(Icons.calendar_today_outlined, color: scheme.onSurfaceVariant),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             '${_date.month}/${_date.day}/${_date.year}',
-                            style: TextStyle(
-                              color: scheme.onSurface,
-                              fontWeight: FontWeight.w800,
-                            ),
+                            style: TextStyle(color: scheme.onSurface, fontWeight: FontWeight.w800),
                           ),
                         ),
-                        Icon(
-                          Icons.chevron_right,
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
                       ],
                     ),
                   ),
@@ -400,10 +340,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                         controller: _qtyCtrl,
                         keyboardType: TextInputType.number,
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Quantity',
-                          hintText: '1',
-                        ),
+                        decoration: const InputDecoration(labelText: 'Quantity', hintText: '1'),
                         validator: (v) {
                           final qty = _parseQty(v ?? '');
                           if (qty == null) return 'Enter a whole number';
@@ -418,14 +355,9 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                     Expanded(
                       child: TextFormField(
                         controller: _unitCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         textInputAction: TextInputAction.next,
-                        decoration: const InputDecoration(
-                          labelText: 'Unit Price',
-                          hintText: '\$4.99',
-                        ),
+                        decoration: const InputDecoration(labelText: 'Unit Price', hintText: '\$4.99'),
                         validator: (v) {
                           final price = _parseMoney(v ?? '');
                           if (price == null) return 'Enter a price';
@@ -482,30 +414,18 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                   onTap: () => setState(() => _showBarcode = !_showBarcode),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
-                      color: scheme.surfaceContainerHighest.withValues(
-                        alpha: 0.18,
-                      ),
-                      border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.28),
-                      ),
+                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.18),
+                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.28)),
                     ),
                     child: Row(
                       children: [
                         Icon(Icons.qr_code_2, color: scheme.onSurfaceVariant),
                         const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text('Optional: barcode / scanned text'),
-                        ),
-                        Icon(
-                          _showBarcode ? Icons.expand_less : Icons.expand_more,
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        const Expanded(child: Text('Optional: barcode / scanned text')),
+                        Icon(_showBarcode ? Icons.expand_less : Icons.expand_more, color: scheme.onSurfaceVariant),
                       ],
                     ),
                   ),
@@ -531,36 +451,21 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                 const SizedBox(height: 12),
 
                 InkWell(
-                  onTap: () => _setPref(
-                    EntryPrefKey.quickAddExpanded,
-                    !_showQuickAddSettings,
-                  ),
+                  onTap: () => _setPref(EntryPrefKey.quickAddExpanded, !_showQuickAddSettings),
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
-                      color: scheme.surfaceContainerHighest.withValues(
-                        alpha: 0.18,
-                      ),
-                      border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.28),
-                      ),
+                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.18),
+                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.28)),
                     ),
                     child: Row(
                       children: [
                         Icon(Icons.tune, color: scheme.onSurfaceVariant),
                         const SizedBox(width: 10),
                         const Expanded(child: Text('Quick add settings')),
-                        Icon(
-                          _showQuickAddSettings
-                              ? Icons.expand_less
-                              : Icons.expand_more,
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        Icon(_showQuickAddSettings ? Icons.expand_less : Icons.expand_more, color: scheme.onSurfaceVariant),
                       ],
                     ),
                   ),
@@ -572,57 +477,19 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
-                      color: scheme.surfaceContainerHighest.withValues(
-                        alpha: 0.22,
-                      ),
-                      border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.28),
-                      ),
+                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.22),
+                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.28)),
                     ),
                     child: Column(
                       children: [
-                        _ToggleRow(
-                          label: 'Keep date',
-                          value: _keepDate,
-                          onChanged: (v) => _setPref(EntryPrefKey.keepDate, v),
-                        ),
-                        _ToggleRow(
-                          label: 'Keep source',
-                          value: _keepSource,
-                          onChanged: (v) =>
-                              _setPref(EntryPrefKey.keepSource, v),
-                        ),
-                        _ToggleRow(
-                          label: 'Keep category',
-                          value: _keepCategory,
-                          onChanged: (v) =>
-                              _setPref(EntryPrefKey.keepCategory, v),
-                        ),
-                        _ToggleRow(
-                          label: 'Keep quantity',
-                          value: _keepQuantity,
-                          onChanged: (v) =>
-                              _setPref(EntryPrefKey.keepQuantity, v),
-                        ),
+                        _ToggleRow(label: 'Keep date', value: _keepDate, onChanged: (v) => _setPref(EntryPrefKey.keepDate, v)),
+                        _ToggleRow(label: 'Keep source', value: _keepSource, onChanged: (v) => _setPref(EntryPrefKey.keepSource, v)),
+                        _ToggleRow(label: 'Keep category', value: _keepCategory, onChanged: (v) => _setPref(EntryPrefKey.keepCategory, v)),
+                        _ToggleRow(label: 'Keep quantity', value: _keepQuantity, onChanged: (v) => _setPref(EntryPrefKey.keepQuantity, v)),
                         const Divider(height: 18),
-                        _ToggleRow(
-                          label: 'Keep description',
-                          value: _keepDescription,
-                          onChanged: (v) =>
-                              _setPref(EntryPrefKey.keepDescription, v),
-                        ),
-                        _ToggleRow(
-                          label: 'Keep unit price',
-                          value: _keepUnitPrice,
-                          onChanged: (v) =>
-                              _setPref(EntryPrefKey.keepUnitPrice, v),
-                        ),
-                        _ToggleRow(
-                          label: 'Keep barcode text',
-                          value: _keepBarcode,
-                          onChanged: (v) =>
-                              _setPref(EntryPrefKey.keepBarcodeText, v),
-                        ),
+                        _ToggleRow(label: 'Keep description', value: _keepDescription, onChanged: (v) => _setPref(EntryPrefKey.keepDescription, v)),
+                        _ToggleRow(label: 'Keep unit price', value: _keepUnitPrice, onChanged: (v) => _setPref(EntryPrefKey.keepUnitPrice, v)),
+                        _ToggleRow(label: 'Keep barcode text', value: _keepBarcode, onChanged: (v) => _setPref(EntryPrefKey.keepBarcodeText, v)),
                       ],
                     ),
                   ),
@@ -634,27 +501,16 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(18),
-                    color: scheme.surfaceContainerHighest.withValues(
-                      alpha: 0.22,
-                    ),
-                    border: Border.all(
-                      color: scheme.outlineVariant.withValues(alpha: 0.28),
-                    ),
+                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.22),
+                    border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.28)),
                   ),
                   child: Row(
                     children: [
-                      Text(
-                        'Total',
-                        style: TextStyle(color: scheme.onSurfaceVariant),
-                      ),
+                      Text('Total', style: TextStyle(color: scheme.onSurfaceVariant)),
                       const Spacer(),
                       Text(
                         '\$${total.toStringAsFixed(2)}',
-                        style: TextStyle(
-                          color: scheme.onSurface,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                        ),
+                        style: TextStyle(color: scheme.onSurface, fontSize: 18, fontWeight: FontWeight.w900),
                       ),
                     ],
                   ),
@@ -662,11 +518,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
                 const SizedBox(height: 14),
 
-                FilledButton.icon(
-                  onPressed: _goPreview,
-                  icon: const Icon(Icons.visibility),
-                  label: const Text('Review transaction'),
-                ),
+                FilledButton.icon(onPressed: _goPreview, icon: const Icon(Icons.visibility), label: const Text('Review transaction')),
               ],
             ),
           ),
@@ -677,11 +529,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 }
 
 class _ToggleRow extends StatelessWidget {
-  const _ToggleRow({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
+  const _ToggleRow({required this.label, required this.value, required this.onChanged});
 
   final String label;
   final bool value;
@@ -689,11 +537,6 @@ class _ToggleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(label),
-      value: value,
-      onChanged: onChanged,
-    );
+    return SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(label), value: value, onChanged: onChanged);
   }
 }

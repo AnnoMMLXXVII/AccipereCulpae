@@ -1,4 +1,5 @@
-import 'package:accipere_culpae/screens/history/scan_history.dart';
+import 'package:anno_accipere_culpae/screens/about/about_screen.dart';
+import 'package:anno_accipere_culpae/screens/history/scan_history.dart';
 import 'package:flutter/material.dart';
 
 import 'screens/landing/dark_action_landing_page.dart';
@@ -16,6 +17,7 @@ class App extends StatelessWidget {
       theme: buildDarkTheme(),
       home: const DarkActionLandingPage(),
       routes: {
+        '/about': (_) => const AboutScreen(),
         '/scan': (_) => const ScanCaptureScreen(),
         '/manual': (_) => const ManualEntryScreen(),
         '/scan_history': (_) => const ScanHistoryScreen()},

@@ -1,8 +1,8 @@
-import 'package:accipere_culpae/widgets/entry_header_brand.dart';
 import 'package:flutter/material.dart';
 
 import '../../widgets/action_card.dart';
 import '../../widgets/bottom_hint_bar.dart';
+import '../../widgets/entry_header_brand.dart';
 import '../../widgets/header.dart';
 import '../../widgets/mini_action.dart';
 import '../../widgets/mini_row.dart';
@@ -24,6 +24,13 @@ class DarkActionLandingPage extends StatelessWidget {
         title: const EntryHeaderBrand(),
         actions: [
           IconButton(
+            tooltip: 'About',
+            onPressed: () {
+              Navigator.pushNamed(context, '/about');
+            },
+            icon: const Icon(Icons.info_outline),
+          ),
+          IconButton(
             tooltip: 'Settings',
             onPressed: () {
               // TODO: Navigator.pushNamed(context, '/settings');
@@ -38,10 +45,7 @@ class DarkActionLandingPage extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
             children: [
-              const Header(
-                title: 'Create an expense',
-                subtitle: 'Fast capture with scan, type, or reuse.',
-              ),
+              const Header(title: 'Create an expense', subtitle: 'Fast capture with scan, type, or reuse.'),
               const SizedBox(height: 14),
 
               ActionCard(
@@ -52,9 +56,7 @@ class DarkActionLandingPage extends StatelessWidget {
                 onTap: () async {
                   final result = await Navigator.pushNamed(context, '/scan');
                   if (result is String && result.trim().isNotEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Submitted: ${result.trim()}')),
-                    );
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Submitted: ${result.trim()}')));
                   }
                 },
               ),
@@ -130,11 +132,7 @@ class DarkActionLandingPage extends StatelessWidget {
                 onViewAll: () {
                   // TODO: Navigator.pushNamed(context, '/history');
                 },
-                items: const [
-                  RecentItem('Gas', 'Chase', 42.18),
-                  RecentItem('Grocery', 'Visa', 88.02),
-                  RecentItem('Coffee', 'Cash', 4.50),
-                ],
+                items: const [RecentItem('Gas', 'Chase', 42.18), RecentItem('Grocery', 'Visa', 88.02), RecentItem('Coffee', 'Cash', 4.50)],
                 onTapItem: (item) {
                   // TODO: “Add again” flow
                 },
@@ -143,9 +141,7 @@ class DarkActionLandingPage extends StatelessWidget {
           ),
         ),
       ),
-      bottomNavigationBar: const BottomHintBar(
-        text: 'Tip: Keep this screen as your home. Scan stays one tap away.',
-      ),
+      bottomNavigationBar: const BottomHintBar(text: 'Tip: Keep this screen as your home. Scan stays one tap away.'),
     );
   }
 }

@@ -1,5 +1,5 @@
-name: accipere_culpae
-description: "A new Flutter project."
+name: anno_accipere_culpae
+description: "A powerful scanning application"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.5.9+15
 
 environment:
   sdk: ^3.10.4
@@ -34,7 +34,7 @@ dependencies:
   mobile_scanner: ^5.2.3
   image_picker: ^1.1.2
   google_mlkit_text_recognition: ^0.13.0
-  shared_preferences: ^2.3.2
+  shared_preferences: ^2.3.3
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -42,6 +42,7 @@ dependencies:
   logger: ^2.4.0
   http: ^1.2.0
   intl: ^0.19.0
+  package_info_plus: ^8.1.2
 
 dev_dependencies:
   flutter_test:
@@ -81,7 +82,7 @@ flutter:
   assets:
     - assets/branding/wordmark_dark.png
     - assets/icon/icon.png
-    
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

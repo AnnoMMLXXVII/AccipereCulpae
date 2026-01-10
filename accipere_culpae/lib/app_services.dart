@@ -1,10 +1,9 @@
-import 'package:accipere_culpae/data/api_client.dart';
-import 'package:accipere_culpae/data/entry_prefs_repository.dart';
-import 'package:accipere_culpae/data/fake_api_client.dart';
-import 'package:accipere_culpae/data/local_entry_prefs_repository.dart';
-
+import 'data/api_client.dart';
+import 'data/entry_prefs_repository.dart';
+import 'data/fake_api_client.dart';
 import 'data/history_fields.dart';
 import 'data/history_repository.dart';
+import 'data/local_entry_prefs_repository.dart';
 import 'data/local_history_repository.dart';
 
 class AppServices {
