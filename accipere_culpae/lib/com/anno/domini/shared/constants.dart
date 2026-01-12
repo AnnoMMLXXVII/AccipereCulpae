@@ -1,10 +1,8 @@
 enum ScannerModes {
-  QR,
+  CAMERA,
   RFID,
-  PHOTO
 }
 
-const SCAN_QR_MODE = "Barcode/QR";
+const SCAN_CAMERA_MODE = "Camera Mode";
 const SCAN_RFID_MODE = "Scanner Mode";
-const SCAN_OCR_MODE = "Photo (OCR)";
 
